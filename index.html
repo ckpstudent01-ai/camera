@@ -177,7 +177,7 @@ navigator.vibrate?.(200);
 
 // ตัวอย่างฟังก์ชันเมื่อฝั่งกล้องสแกนพบ QR Code (รหัสประจำตัว 5 หลัก)
 function onScanSuccess(scannedCode) {
-    // ส่งข้อมูล HTTP POST ไปที่ Google Apps Script Web App ของคุณ
+    // ส่งรหัส 5 หลักที่สแกนได้ไปยัง Web App ของ Google Apps Script
     fetch("ใส่_URL_เว็บแอป_APPS_SCRIPT_ของคุณที่นี่", {
         method: "POST",
         body: JSON.stringify({ number: scannedCode }),
@@ -185,17 +185,39 @@ function onScanSuccess(scannedCode) {
     })
     .then(response => response.json())
     .then(result => {
-        // ตรวจสอบสัญญาณคำสั่งสั่งปิดหน้าต่างจากฝั่ง Google Sheet ล่าสุด
-        if(result.closeWindow) {
-            // คุณสามารถใส่การระบุ alert สั้น ๆ แจ้งชื่อนักเรียนได้ หรือจะสั่งปิดหน้าต่างทันทีเลยก็ได้
-            alert(result.studentName + " -> " + result.message); 
-            
-            window.close(); // 🌟 สั่งให้หน้าต่างกล้องนี้ พับและปิดตัวเองลงทันทีโดยอัตโนมัติ
+        // หา Element ของพื้นที่แสดงผลหน้ากล้องบน GitHub ของคุณ (เช่น id="camera-view") เพื่อเปลี่ยนหน้าจอ
+        const cameraView = document.getElementById('camera-view'); 
+        
+        if(result.success) {
+            // กรณีบันทึกข้อมูลสำเร็จ
+            cameraView.innerHTML = `
+                <div style="text-align:center; padding:30px; background:#ffffff; border-radius:10px; font-family:'Sarabun',sans-serif; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+                    <h2 style="color:#28a745; margin-bottom:15px;">✅ บันทึกสำเร็จ</h2>
+                    <h3 style="color:#333; margin-bottom:10px;">${result.studentName}</h3>
+                    <p style="color:#666; margin-size:16px;">ระดับชั้น: ห้อง ${result.studentRoom} (${result.time} น.)</p>
+                    <button onclick="window.close()" style="padding:12px 35px; background:#222222; color:#ffffff; border:none; border-radius:25px; font-size:16px; font-weight:bold; cursor:pointer; margin-top:20px; transition: 0.3s;">
+                        🚪 ปิดหน้าต่างนี้
+                    </button>
+                </div>
+            `;
+        } else {
+            // กรณีอยู่นอกเวลาเรียน หรือไม่พบรหัสประจำตัว
+            cameraView.innerHTML = `
+                <div style="text-align:center; padding:30px; background:#ffffff; border-radius:10px; font-family:'Sarabun',sans-serif; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+                    <h2 style="color:#dc3545; margin-bottom:15px;">❌ บันทึกไม่สำเร็จ</h2>
+                    <p style="color:#333; font-size:16px; font-weight:bold;">${result.message}</p>
+                    <button onclick="window.close()" style="padding:12px 35px; background:#555555; color:#ffffff; border:none; border-radius:25px; font-size:16px; font-weight:bold; cursor:pointer; margin-top:20px;">
+                        🚪 ปิดหน้าต่าง
+                    </button>
+                </div>
+            `;
         }
     })
-    .catch(error => console.log('Error:', error));
+    .catch(error => {
+        console.error('Error:', error);
+        alert("เกิดข้อผิดพลาดในการเชื่อมต่อเครือข่าย");
+    });
 }
-
 // เปิดกล้องอัตโนมัติเมื่อเปิดหน้าเว็บ
 window.onload=function(){
 
