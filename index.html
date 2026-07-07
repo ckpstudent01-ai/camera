@@ -175,24 +175,25 @@ navigator.vibrate?.(200);
 
 }
 
-function stopScanner(){
-
-if(!scanning) return;
-
-html5QrCode.stop().then(()=>{
-
-html5QrCode.clear();
-
-scanning=false;
-
-document.getElementById("result").innerHTML="ปิดกล้องแล้ว";
-
-}).catch(err=>{
-
-console.log(err);
-
-});
-
+// ตัวอย่างฟังก์ชันเมื่อฝั่งกล้องสแกนพบ QR Code (รหัสประจำตัว 5 หลัก)
+function onScanSuccess(scannedCode) {
+    // ส่งข้อมูล HTTP POST ไปที่ Google Apps Script Web App ของคุณ
+    fetch("ใส่_URL_เว็บแอป_APPS_SCRIPT_ของคุณที่นี่", {
+        method: "POST",
+        body: JSON.stringify({ number: scannedCode }),
+        headers: { "Content-Type": "text/plain" }
+    })
+    .then(response => response.json())
+    .then(result => {
+        // ตรวจสอบสัญญาณคำสั่งสั่งปิดหน้าต่างจากฝั่ง Google Sheet ล่าสุด
+        if(result.closeWindow) {
+            // คุณสามารถใส่การระบุ alert สั้น ๆ แจ้งชื่อนักเรียนได้ หรือจะสั่งปิดหน้าต่างทันทีเลยก็ได้
+            alert(result.studentName + " -> " + result.message); 
+            
+            window.close(); // 🌟 สั่งให้หน้าต่างกล้องนี้ พับและปิดตัวเองลงทันทีโดยอัตโนมัติ
+        }
+    })
+    .catch(error => console.log('Error:', error));
 }
 
 // เปิดกล้องอัตโนมัติเมื่อเปิดหน้าเว็บ
