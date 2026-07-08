@@ -3,84 +3,24 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>QR Scanner For Google Sheets</title>
+    <title>QR Scanner (Mobile Compatible)</title>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: Tahoma, sans-serif;
-        }
-        body {
-            background: #f5f5f5;
-            text-align: center;
-        }
-        .header {
-            background: #1565C0;
-            color: white;
-            padding: 15px;
-            font-size: 22px;
-            font-weight: bold;
-        }
-        #reader {
-            width: 90%;
-            max-width: 400px;
-            margin: 20px auto;
-            background: white;
-            border-radius: 10px;
-            overflow: hidden;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        }
-        .result {
-            width: 90%;
-            max-width: 400px;
-            margin: auto;
-            padding: 15px;
-            background: white;
-            border-radius: 10px;
-            font-size: 18px;
-            font-weight: bold;
-            color: #1565C0;
-            box-shadow: 0 2px 10px rgba(0,0,0,.15);
-        }
-        .buttons {
-            margin-top: 20px;
-        }
-        button {
-            padding: 12px 25px;
-            font-size: 16px;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            margin: 5px;
-            font-weight: bold;
-        }
-        .start {
-            background: #2E7D32;
-            color: white;
-        }
-        .stop {
-            background: #C62828;
-            color: white;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: Tahoma, sans-serif; }
+        body { background: #f5f5f5; text-align: center; }
+        .header { background: #1565C0; color: white; padding: 15px; font-size: 22px; font-weight: bold; }
+        #reader { width: 90%; max-width: 400px; margin: 20px auto; background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        #main-container { width: 90%; max-width: 400px; margin: auto; padding: 15px; }
+        .result { padding: 15px; background: white; border-radius: 10px; font-size: 18px; font-weight: bold; color: #1565C0; box-shadow: 0 2px 10px rgba(0,0,0,.15); }
     </style>
 </head>
 <body>
 
-<div class="header">
-    📸 หน้าจอกล้องสแกน QR Code
-</div>
+<div class="header">📸 สแกน QR Code (เปิดบนมือถือได้)</div>
 
-<div id="reader"></div>
-
-<div class="result" id="result">
-    กำลังเปิดกล้องอัตโนมัติ...
-</div>
-
-<div class="buttons">
-    <button class="start" onclick="startScanner()">📸 เปิดกล้อง</button>
-    <button class="stop" onclick="stopScanner()">❌ ปิดกล้อง</button>
+<div id="main-container">
+    <div id="reader"></div>
+    <div class="result" id="result">กำลังเตรียมความพร้อมของกล้อง...</div>
 </div>
 
 <script>
@@ -92,84 +32,80 @@ function startScanner() {
     if (scanning) return;
     html5QrCode = new Html5Qrcode("reader");
     html5QrCode.start(
-        { facingMode: "environment" }, // บังคับเปิดกล้องหลัง
-        {
-            fps: 10,
-            qrbox: { width: 250, height: 250 }
-        },
+        { facingMode: "environment" }, // บังคับใช้กล้องหลังมือถือ
+        { fps: 10, qrbox: { width: 250, height: 250 } },
         onScanSuccess
     ).then(() => {
         scanning = true;
-        document.getElementById("result").innerText = "วางคิวอาร์โค้ดให้อยู่ในกรอบเพื่อสแกน";
+        document.getElementById("result").innerText = "วางคิวอาร์โค้ดในกรอบเพื่อเช็คชื่อ";
     }).catch(err => {
-        document.getElementById("result").innerText = "ไม่สามารถเปิดกล้องได้ (กรุณาอนุญาตสิทธิ์)";
+        document.getElementById("result").innerHTML = "<span style='color:red;'>❌ ไม่สามารถเปิดกล้องได้</span><br><small>กรุณาเปิดลิงก์นี้บน Safari/Chrome ปกติ (ห้ามเปิดในไลน์) และอนุญาตสิทธิ์กล้อง</small>";
         console.error(err);
     });
 }
 
-function stopScanner() {
-    if (!scanning) return;
-    html5QrCode.stop().then(() => {
-        scanning = false;
-        document.getElementById("result").innerText = "ปิดกล้องแล้ว";
-    }).catch(err => console.error(err));
-}
-
 function onScanSuccess(decodedText) {
-    // ป้องกันการสแกนซ้ำโค้ดเดิมแบบรัวๆ
     if (decodedText === lastCode) return;
     lastCode = decodedText;
-
-    // ระบบสั่นเตือน (ทำงานเฉพาะบนแอนดรอยด์/โครม)
     navigator.vibrate?.(200);
     
-    document.getElementById("result").innerHTML = "✅ สแกนเจอคุณสำเร็จ: " + decodedText + "<br><small>กำลังส่งข้อมูล...</small>";
+    document.getElementById("result").innerHTML = "⏳ สแกนเจอเลข " + decodedText + " กำลังบันทึก...";
     
-    // หยุดกล้องทันทีเมื่อสแกนเจอ
     if (scanning) {
-        html5QrCode.stop().then(() => {
-            scanning = false;
-            sendToAppsScript(decodedText);
-        });
+        html5QrCode.stop().then(() => { scanning = false; sendData(decodedText); });
     } else {
-        sendToAppsScript(decodedText);
+        sendData(decodedText);
     }
 }
 
-function sendToAppsScript(studentId) {
-    // 💡 ค้นหาลิงก์หน้าเว็บหลักของ Apps Script ที่เปิดหน้านี้ขึ้นมา 
-    // โดยส่งค่ารหัสประจำตัวกลับไปในรูปแบบพารามิเตอร์เพื่อให้ฝั่งโน้นจัดการต่อ
-    const openerUrl = window.opener ? window.opener.location.href : null;
+function sendData(studentId) {
+    // 💡 ดึงพารามิเตอร์ url ที่ส่งมาจากหน้าหลัก Apps Script โค้ดฝั่ง GitHub จึงไม่ต้องฟิกซ์ลิงก์ตายตัวอีกต่อไป
+    const urlParams = new URLSearchParams(window.location.search);
+    let webAppUrl = urlParams.get('url');
     
-    if (openerUrl) {
-        // ทำการล้างค่า parameter เก่าออกก่อน (ถ้ามี) แล้วแปะ ?id=[รหัส] เข้าไปใหม่
-        const baseUrl = openerUrl.split('?')[0];
-        const targetUrl = baseUrl + "?id=" + encodeURIComponent(studentId);
-        
-        // สั่งให้หน้าต่างหลัก (หน้า Apps Script) โหลดข้อมูลใหม่ตาม ID ที่สแกนได้
-        window.opener.location.href = targetUrl;
-        
-        // แสดงข้อความบนหน้าจอก่อนปิดตัวเอง
-        document.getElementById("result").innerHTML = "<span style='color:green;'>บันทึกสำเร็จ!</span>";
-        
-        // รอ 0.5 วินาทีแล้วปิดหน้ากล้อง GitHub ทันที ปล่อยให้ผู้ใช้ดูผลที่หน้าจอหลัก
-        setTimeout(() => {
-            window.close();
-        }, 500);
-    } else {
-        // กรณีเปิดหน้าเว็บนี้ขึ้นมาตรงๆ โดยไม่ได้กดเปิดมาจากหน้า Apps Script
-        alert("สแกนสำเร็จ รหัสคือ: " + studentId + " \n(กรุณาเปิดหน้าเว็บนี้ผ่านปุ่มบนหน้า Google Apps Script เท่านั้น)");
-        // รีเซ็ตเพื่อให้สแกนต่อได้
-        lastCode = "";
-        startScanner();
+    // ถ้าไม่มีการส่ง url มา ให้ใช้ระบบ Prompt ถามผู้ใช้ (ป้องกันการเปิดตรงๆ)
+    if (!webAppUrl) {
+        alert("กรุณาเปิดหน้านี้ผ่านทางหน้าหลักของระบบ Google Apps Script เท่านั้น");
+        location.reload();
+        return;
     }
+    
+    // ส่งข้อมูลข้ามไปบันทึกที่ Google Apps Script เวอร์ชันปัจจุบันโดยตรง
+    fetch(webAppUrl, {
+        method: "POST",
+        body: JSON.stringify({ number: studentId }),
+        headers: { "Content-Type": "text/plain" }
+    })
+    .then(response => response.json())
+    .then(result => {
+        const mainContainer = document.getElementById('main-container');
+        if (result.success) {
+            mainContainer.innerHTML = `
+                <div style="text-align:center; padding:30px; background:#ffffff; border-radius:10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin-top:20px;">
+                    <h2 style="color:#28a745; margin-bottom:15px;">✅ บันทึกสำเร็จ</h2>
+                    <h3 style="color:#333; margin-bottom:10px;">${result.studentName}</h3>
+                    <p style="color:#666; font-size:16px;">ห้อง: ${result.studentRoom} | เวลา: ${result.time} น.</p>
+                    <button onclick="location.reload()" style="padding:12px 35px; background:#1565C0; color:#ffffff; border:none; border-radius:25px; font-size:16px; font-weight:bold; cursor:pointer; margin-top:20px;">
+                        👉 สแกนคนต่อไป
+                    </button>
+                </div>`;
+        } else {
+            mainContainer.innerHTML = `
+                <div style="text-align:center; padding:30px; background:#ffffff; border-radius:10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin-top:20px;">
+                    <h2 style="color:#dc3545; margin-bottom:15px;">❌ ไม่สำเร็จ</h2>
+                    <p style="color:#333; font-size:16px; font-weight:bold; margin-bottom:15px;">${result.message}</p>
+                    <button onclick="location.reload()" style="padding:10px 20px; background:#555; color:#ffffff; border:none; border-radius:8px; cursor:pointer;">🔄 ลองใหม่</button>
+                </div>`;
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert("เกิดข้อผิดพลาดในการเชื่อมต่อกรุณาลองใหม่");
+        location.reload();
+    });
 }
 
-// สั่งให้ระบบเปิดกล้องอัตโนมัติทันทีเมื่อโหลดหน้าเว็บสำเร็จ
-window.onload = function() {
-    startScanner();
-};
+window.onload = startScanner;
 </script>
-
 </body>
 </html>
