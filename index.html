@@ -19,6 +19,13 @@
             box-shadow: 0 4px 10px rgba(21,101,192,.35);
         }
         #start-btn:active { background: #0d47a1; }
+        .gps-status {
+            margin: 10px auto; padding: 8px 12px; border-radius: 8px;
+            font-size: 14px; max-width: 400px;
+            background: #fff8e1; color: #7a5b00; border: 1px solid #f0e2ad;
+        }
+        .gps-status.ok { background: #e7f6ec; color: #146c2e; border-color: #c3e8cf; }
+        .gps-status.err { background: #fdecea; color: #a12622; border-color: #f3c6c3; }
     </style>
 </head>
 <body>
@@ -26,6 +33,7 @@
 <div class="header">📸 สแกน QR Code (เปิดบนมือถือได้)</div>
 
 <div id="main-container">
+    <div class="gps-status" id="gps-status">📍 กำลังขอสิทธิ์เข้าถึงตำแหน่ง...</div>
     <button id="start-btn" onclick="startScanner()">📷 กดเพื่อเปิดกล้อง</button>
     <div id="reader"></div>
     <div class="result" id="result">กดปุ่มด้านบนเพื่อเริ่มใช้งานกล้อง</div>
@@ -35,6 +43,42 @@
 let html5QrCode;
 let scanning = false;
 let lastCode = "";
+let currentPosition = null; // ตำแหน่ง GPS ล่าสุด ใช้แนบไปกับข้อมูลที่ส่งกลับ Apps Script
+
+function initGeolocation() {
+    const gpsBar = document.getElementById('gps-status');
+    if (!navigator.geolocation) {
+        gpsBar.className = 'gps-status err';
+        gpsBar.innerText = '🔴 อุปกรณ์นี้ไม่รองรับการระบุตำแหน่ง GPS';
+        return;
+    }
+
+    // ขอตำแหน่งทันทีครั้งแรก (บังคับให้ขึ้น popup ขอสิทธิ์เร็วที่สุด และได้พิกัดแรกไวที่สุด)
+    navigator.geolocation.getCurrentPosition(
+        (pos) => {
+            currentPosition = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+            gpsBar.className = 'gps-status ok';
+            gpsBar.innerText = '✅ พร้อมใช้งานตำแหน่ง (ความแม่นยำ ~' + Math.round(pos.coords.accuracy) + ' ม.)';
+        },
+        (err) => {
+            currentPosition = null;
+            gpsBar.className = 'gps-status err';
+            gpsBar.innerText = '🔴 ยังไม่ได้รับสิทธิ์ตำแหน่ง กรุณาอนุญาต GPS แล้วกดปุ่มกล้องใหม่';
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+
+    // ติดตามตำแหน่งต่อเนื่อง เผื่อผู้ใช้ขยับตัว หรือพิกัดแรกยังไม่แม่นยำพอ
+    navigator.geolocation.watchPosition(
+        (pos) => {
+            currentPosition = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+            gpsBar.className = 'gps-status ok';
+            gpsBar.innerText = '✅ พร้อมใช้งานตำแหน่ง (ความแม่นยำ ~' + Math.round(pos.coords.accuracy) + ' ม.)';
+        },
+        (err) => { console.warn("Geolocation watch error:", err); },
+        { enableHighAccuracy: true, maximumAge: 8000, timeout: 15000 }
+    );
+}
 
 // เช็คก่อนว่าเบราว์เซอร์รองรับ getUserMedia และเป็น HTTPS/localhost หรือไม่
 function checkEnvironment() {
@@ -57,6 +101,8 @@ function startScanner() {
 
     document.getElementById("start-btn").style.display = "none";
     document.getElementById("result").innerText = "กำลังขอสิทธิ์เข้าถึงกล้อง...";
+
+    initGeolocation(); // ขอสิทธิ์ตำแหน่งไปพร้อมกัน (ใช้ยืนยันว่าอยู่ในพื้นที่โรงเรียน)
 
     html5QrCode = new Html5Qrcode("reader");
 
@@ -125,7 +171,7 @@ function onScanSuccess(decodedText) {
     lastCode = decodedText;
     navigator.vibrate?.(200);
 
-    document.getElementById("result").innerHTML = "⏳ สแกนเจอเลข " + decodedText + " กำลังบันทึก...";
+    document.getElementById("result").innerHTML = "⏳ สแกนเจอเลข " + decodedText + " กำลังตรวจสอบตำแหน่ง...";
 
     if (scanning) {
         html5QrCode.stop().then(() => { scanning = false; sendData(decodedText); });
@@ -135,6 +181,32 @@ function onScanSuccess(decodedText) {
 }
 
 function sendData(studentId) {
+    if (currentPosition) {
+        postToServer(studentId, currentPosition.lat, currentPosition.lng);
+        return;
+    }
+
+    // ยังไม่มีพิกัด (watchPosition ยังไม่ทันได้ค่าแรก) ให้ลองขอตำแหน่งสดอีกครั้งก่อนส่ง แทนที่จะส่ง null ไปเลย
+    document.getElementById("result").innerHTML = "📍 กำลังค้นหาตำแหน่ง GPS กรุณารอสักครู่...";
+    navigator.geolocation.getCurrentPosition(
+        (pos) => {
+            currentPosition = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+            postToServer(studentId, currentPosition.lat, currentPosition.lng);
+        },
+        (err) => {
+            document.getElementById("result").innerHTML =
+                "<span style='color:red;'>❌ ไม่สามารถระบุตำแหน่งได้</span><br>" +
+                "<small>กรุณาเปิด GPS/Location Services ของเครื่อง และอนุญาตสิทธิ์ตำแหน่งให้เว็บไซต์นี้ แล้วลองสแกนใหม่</small>";
+            lastCode = ""; // ปลดล็อคให้สแกนรหัสเดิมซ้ำได้อีกครั้งหลังแก้ไข GPS แล้ว
+            startScanner(); // เปิดกล้องต่อให้ลองสแกนใหม่ได้เลยหลังแก้ปัญหา GPS
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+}
+
+function postToServer(studentId, lat, lng) {
+    document.getElementById("result").innerHTML = "⏳ กำลังบันทึกข้อมูล...";
+
     // 💡 ดึงพารามิเตอร์ url ที่ส่งมาจากหน้าหลัก Apps Script โค้ดฝั่ง GitHub จึงไม่ต้องฟิกซ์ลิงก์ตายตัวอีกต่อไป
     const urlParams = new URLSearchParams(window.location.search);
     let webAppUrl = urlParams.get('url');
@@ -146,10 +218,10 @@ function sendData(studentId) {
         return;
     }
 
-    // ส่งข้อมูลข้ามไปบันทึกที่ Google Apps Script เวอร์ชันปัจจุบันโดยตรง
+    // ส่งข้อมูลข้ามไปบันทึกที่ Google Apps Script เวอร์ชันปัจจุบันโดยตรง (แนบพิกัด GPS ไปด้วย)
     fetch(webAppUrl, {
         method: "POST",
-        body: JSON.stringify({ number: studentId }),
+        body: JSON.stringify({ number: studentId, lat: lat, lng: lng }),
         headers: { "Content-Type": "text/plain" }
     })
     .then(response => response.json())
@@ -163,6 +235,10 @@ function sendData(studentId) {
                     <p style="color:#666; font-size:16px;">ห้อง: ${result.studentRoom} | เวลา: ${result.time} น.</p>
                     <button onclick="location.reload()" style="padding:12px 35px; background:#1565C0; color:#ffffff; border:none; border-radius:25px; font-size:16px; font-weight:bold; cursor:pointer; margin-top:20px;">
                         👉 สแกนคนต่อไป
+                    </button>
+                    <br>
+                    <button onclick="window.close()" style="padding:8px 25px; background:transparent; color:#555; border:1px solid #ccc; border-radius:20px; font-size:14px; cursor:pointer; margin-top:12px;">
+                        ⬅️ ปิดหน้าต่างนี้ กลับหน้าหลัก
                     </button>
                 </div>`;
         } else {
